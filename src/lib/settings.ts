@@ -14,7 +14,7 @@ export interface AppSettings {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  lang: "auto",
+  lang: "en",
   theme: "dark",
   accent: "mist",
   font: "preset",
