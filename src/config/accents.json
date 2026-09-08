@@ -1,0 +1,72 @@
+[
+  {
+    "id": "mist",
+    "labelKey": "accents.mist",
+    "light": {},
+    "dark": {}
+  },
+  {
+    "id": "enma",
+    "labelKey": "accents.enma",
+    "light": {
+      "primary": "oklch(0.577 0.245 27.325)",
+      "primaryFg": "oklch(1 0 0)",
+      "ring": "oklch(0.65 0.18 27.325)",
+      "sidebarPrimary": "oklch(0.577 0.245 27.325)"
+    },
+    "dark": {
+      "primary": "oklch(0.65 0.21 25.5)",
+      "primaryFg": "oklch(1 0 0)",
+      "ring": "oklch(0.65 0.21 25.5)",
+      "sidebarPrimary": "oklch(0.65 0.21 25.5)"
+    }
+  },
+  {
+    "id": "violet",
+    "labelKey": "accents.violet",
+    "light": {
+      "primary": "oklch(0.546 0.245 262.881)",
+      "primaryFg": "oklch(0.97 0.014 254.604)",
+      "ring": "oklch(0.623 0.214 259.815)",
+      "sidebarPrimary": "oklch(0.546 0.245 262.881)"
+    },
+    "dark": {
+      "primary": "oklch(0.623 0.214 259.815)",
+      "primaryFg": "oklch(0.97 0.014 254.604)",
+      "ring": "oklch(0.623 0.214 259.815)",
+      "sidebarPrimary": "oklch(0.623 0.214 259.815)"
+    }
+  },
+  {
+    "id": "emerald",
+    "labelKey": "accents.emerald",
+    "light": {
+      "primary": "oklch(0.596 0.145 163.225)",
+      "primaryFg": "oklch(1 0 0)",
+      "ring": "oklch(0.596 0.145 163.225)",
+      "sidebarPrimary": "oklch(0.596 0.145 163.225)"
+    },
+    "dark": {
+      "primary": "oklch(0.765 0.177 163.223)",
+      "primaryFg": "oklch(0.18 0.02 160)",
+      "ring": "oklch(0.765 0.177 163.223)",
+      "sidebarPrimary": "oklch(0.765 0.177 163.223)"
+    }
+  },
+  {
+    "id": "amber",
+    "labelKey": "accents.amber",
+    "light": {
+      "primary": "oklch(0.646 0.222 41.116)",
+      "primaryFg": "oklch(1 0 0)",
+      "ring": "oklch(0.646 0.222 41.116)",
+      "sidebarPrimary": "oklch(0.646 0.222 41.116)"
+    },
+    "dark": {
+      "primary": "oklch(0.75 0.183 55.934)",
+      "primaryFg": "oklch(0.22 0.03 50)",
+      "ring": "oklch(0.75 0.183 55.934)",
+      "sidebarPrimary": "oklch(0.75 0.183 55.934)"
+    }
+  }
+]

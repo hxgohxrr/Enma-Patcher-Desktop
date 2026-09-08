@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+
+# Frontend build output
+dist/
+tsconfig.tsbuildinfo
+
+# Rust build output
+src-tauri/target/
+.patchbuild/target-cli/
+.patchbuild/target/
+
+# Local patch/build scratch (GBs of game data, logs, work dirs)
+.patchbuild/
+output-archive/
+
+# Game files: never commit these (copyrighted + huge)
+*.apk
+*.apks
+*.ipa
+*.drmb
+*.xapk
+output/
+
+# Signing identities and secrets: NEVER commit
+*.p12
+*.pfx
+*.mobileprovision
+*.keystore
+*.jks
+apple_account.json
+apple_accounts.json
+
+# Mod/tool archives fetched at runtime
+.tools-dl/
+
+# Local logs
+*.log
+
+# Env / local config
+.env
+.env.*
+!.env.example
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+*.orig
+*.rej
+*.bak

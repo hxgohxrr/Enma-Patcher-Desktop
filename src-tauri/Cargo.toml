@@ -1,0 +1,30 @@
+[package]
+name = "enma-patcher-desktop"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+zip = { version = "2", features = ["deflate", "bzip2", "zstd"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"] }
+tokio = { version = "1", features = ["full"] }
+plist = { version = "1", features = ["serde"] }
+crc32fast = "1"
+regex = "1"
+chrono = "0.4"
+encoding_rs = "0.8"
+futures-util = "0.3"
+clap = { version = "4", features = ["derive"] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

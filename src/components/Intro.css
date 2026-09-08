@@ -1,0 +1,62 @@
+
+.intro2 {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 1;
+  transition: opacity 300ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.intro2-leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.intro2-glow {
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(230, 30, 40, 0.4) 0%, rgba(230, 30, 40, 0) 65%);
+  opacity: 0;
+  transform: scale(0.85);
+  animation: intro2-glow 1.2s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.intro2-logo {
+  width: 148px;
+  height: 148px;
+  border-radius: 9999px;
+  object-fit: cover;
+  user-select: none;
+  box-shadow: 0 0 80px rgba(230, 30, 40, 0.4), 0 0 22px rgba(230, 30, 40, 0.55);
+  opacity: 0;
+  transform: scale(0.9);
+  animation: intro2-logo 1.2s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+@keyframes intro2-glow {
+  0% { opacity: 0; transform: scale(0.85); }
+  40% { opacity: 1; transform: scale(1.05); }
+  100% { opacity: 1; transform: scale(1.05); }
+}
+
+@keyframes intro2-logo {
+  0% { opacity: 0; transform: scale(0.9); }
+  30% { opacity: 1; transform: scale(1); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intro2-glow {
+    animation: none;
+    opacity: 0;
+  }
+  .intro2-logo {
+    animation-duration: 0.2s;
+  }
+}
