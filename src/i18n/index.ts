@@ -3,7 +3,7 @@ import { createContext, useContext } from "react";
 export type Vars = Record<string, string | number>;
 type Dict = Record<string, unknown>;
 
-const BASE = "es";
+const BASE = "en";
 
 const bundled = import.meta.glob("./locales/*.json", { eager: true }) as Record<
   string,
