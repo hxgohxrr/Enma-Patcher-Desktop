@@ -95,7 +95,6 @@ export async function loadPersistedCrashLog(dataDir: string): Promise<void> {
       notify();
     }
   } catch {
-    /* first run */
   }
 }
 
@@ -140,7 +139,6 @@ async function maybeAutoSend(): Promise<void> {
   try {
     await sendCrashReport(config.endpoint);
   } catch {
-    /* send failures never re-enter the log */
   } finally {
     sending = false;
   }

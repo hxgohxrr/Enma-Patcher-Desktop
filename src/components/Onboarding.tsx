@@ -65,7 +65,6 @@ export function Onboarding(props: { open: boolean; onDone: () => void }) {
       if (idx + 1 < STEPS.length) setIdx(idx + 1);
       else doneRef.current();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, idx ]);
 
   useEffect(() => {
@@ -80,7 +79,6 @@ export function Onboarding(props: { open: boolean; onDone: () => void }) {
       window.removeEventListener("resize", onResize);
       window.removeEventListener("keydown", onKey);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, idx ]);
 
   if (!open || !box) return null;

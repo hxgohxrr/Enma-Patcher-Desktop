@@ -15,7 +15,6 @@ export function OutputFolderPicker(props: { platform: "android" | "ios" }) {
       .getOutputDir(props.platform)
       .then(setDir)
       .catch((e) => setMsg(humanizeError(t, e)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function pick() {
