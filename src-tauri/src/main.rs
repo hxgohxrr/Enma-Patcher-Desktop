@@ -2558,6 +2558,21 @@ fn verify_schemes(java: &str, uber: &Path, signed: &Path) -> Result<Vec<String>,
     Ok(schemes)
 }
 
+fn clear_dir_contents(dir: &Path) -> Result<(), String> {
+    let _ = fs::remove_dir_all(dir);
+    fs::create_dir_all(dir).map_err(|e| format!("{e}"))?;
+    Ok(())
+}
+
+fn move_file(src: &Path, dst: &Path) -> Result<(), String> {
+    if fs::rename(src, dst).is_ok() {
+        return Ok(());
+    }
+    fs::copy(src, dst).map_err(|e| format!("{e}"))?;
+    let _ = fs::remove_file(src);
+    Ok(())
+}
+
 fn java_base_args(near: Option<&Path>) -> Vec<String> {
     let mut args = vec!["-Xmx4g".to_string()];
     if let Some(base) = near {
@@ -2716,6 +2731,11 @@ async fn sign_apk(
     if uber_path.is_some() {
         if let Some(uber) = uber_path.as_ref() {
             emit(app, "sign", "Signing with uber-apk-signer...", 0, 1);
+            let uber_out = unsigned
+                .parent()
+                .unwrap_or(Path::new("."))
+                .join("uber-out");
+            clear_dir_contents(&uber_out)?;
             let mut args: Vec<String> = java_base_args(unsigned.parent());
             args.extend([
                 "-jar".to_string(),
@@ -2724,12 +2744,7 @@ async fn sign_apk(
                 "-a".to_string(),
                 unsigned.to_str().unwrap_or_default().to_string(),
                 "--out".to_string(),
-                signed
-                    .parent()
-                    .unwrap_or(Path::new("."))
-                    .to_str()
-                    .unwrap_or_default()
-                    .to_string(),
+                uber_out.to_str().unwrap_or_default().to_string(),
                 "--allowResign".to_string(),
             ]);
             if let Some(ks) = uber_ks.as_ref() {
@@ -2777,7 +2792,8 @@ async fn sign_apk(
                 }
             }
             if uber_ok {
-                if let Some(parent) = signed.parent() {
+                {
+                    let parent = &uber_out;
                     let stem = unsigned
                         .file_stem()
                         .map(|s| s.to_string_lossy().to_string())
@@ -2802,7 +2818,7 @@ async fn sign_apk(
                                     .as_ref()
                                 && p.extension().map(|e| e == "apk").unwrap_or(false)
                             {
-                                if fs::rename(&p, signed).is_ok() {
+                                if move_file(&p, signed).is_ok() {
                                     renamed = true;
                                 }
                             }

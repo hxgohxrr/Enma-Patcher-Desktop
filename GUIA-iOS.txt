@@ -1,0 +1,33 @@
+GUIA RAPIDA: PARCHEAR iOS CON ENMA PATCHER
+==========================================
+
+LO QUE NECESITAS (TIENES QUE CONSEGUIRLO TU):
+---------------------------------------------
+Enma Patcher NO incluye ni puede darte ninguno de estos archivos.
+Tienes que buscarlos y aportarlos tu:
+
+1. El .ipa DESENCRIPTADO de TU copia del juego.
+   Sin desencriptar no sirve. Tiene que ser tuyo.
+2. Los mods (repo o ZIP con su enmapatcher.cfg.json).
+3. Tu Apple ID con contrasena de aplicacion.
+   La firma gratuita caduca cada 7 dias: habra que refirmar.
+
+Nosotros no podemos darte el juego, ni el .ipa, ni cuentas,
+ni certificados. Sin tus archivos no hay parche.
+
+PASOS:
+------
+1. Abre Enma Patcher y ve a la pestana iOS.
+2. Elige tu .ipa desencriptado.
+3. Pulsa Parchear y espera a que termine.
+4. Elige la cuenta en el desplegable.
+5. Si tu cuenta tiene identidad importada (pestana Cuenta),
+   pulsa "Firmar con zsign". Si no, exporta el .ipa sin firmar.
+6. Instala el .ipa resultante con Sideloadly.
+
+AVISOS:
+-------
+- Si no activas ningun mod, la app te avisara y solo limpiara
+  y reempaquetara el .ipa.
+- El certificado gratuito de Apple dura 7 dias.
+- Tu dispositivo tiene que estar en el perfil de la cuenta.
