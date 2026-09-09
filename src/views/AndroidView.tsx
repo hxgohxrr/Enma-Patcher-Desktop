@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { sound } from "../lib/sound";
+import { Modal } from "../components/Modal";
+import { HoldButton } from "../components/HoldButton";
 import { Check, ChevronDown, FolderOpen, ShieldCheck, TriangleAlert, Download, MonitorSmartphone } from "lucide-react";
 import {
   ApksInfo,
@@ -155,9 +157,13 @@ export function AndroidView(props: { mods: ModSpec[] }) {
   }
 
   const needsDrmb = apksInfo && !apksInfo.singleApk && apksInfo.splits.length > 0;
+  const hasMods = props.mods.some((m) => m.enabled);
+  const [noModsOpen, setNoModsOpen] = useState(false);
+  const [smaliOpen, setSmaliOpen] = useState(false);
+  const [smaliFiles, setSmaliFiles] = useState(0);
+  const [scanning, setScanning] = useState(false);
   const canPatch =
     apksPath &&
-    props.mods.some((m) => m.enabled) &&
     (!needsDrmb || drmbPath) &&
     !patching &&
     (!customSign || sv1 || sv2 || sv3) &&
@@ -165,6 +171,33 @@ export function AndroidView(props: { mods: ModSpec[] }) {
 
   async function runPatch() {
     if (!apksPath || !canPatch) return;
+    if (!hasMods) {
+      setNoModsOpen(true);
+      return;
+    }
+    setScanning(true);
+    try {
+      const enabled = props.mods.filter((m) => m.enabled);
+      const scans = await Promise.all(enabled.map((m) => api.inspectModSmali(m)));
+      const total = scans.reduce((n, s) => n + s.smaliFiles, 0);
+      if (total > 0) {
+        setSmaliFiles(total);
+        setSmaliOpen(true);
+        return;
+      }
+    } catch (e) {
+      setError(humanizeError(t, e));
+      return;
+    } finally {
+      setScanning(false);
+    }
+    await doPatch();
+  }
+
+  async function doPatch() {
+    if (!apksPath) return;
+    setNoModsOpen(false);
+    setSmaliOpen(false);
     setPatching(true);
     setSteps([]);
     setError(null);
@@ -426,11 +459,11 @@ export function AndroidView(props: { mods: ModSpec[] }) {
       <Card className="p-4 space-y-3">
         <div className="flex items-center gap-3">
           <Button size="lg" className="flex-1" disabled={!canPatch} onClick={() => void runPatch()}>
-            <Download size={16} /> {patching ? t("android.patching") : t("android.patch")}
+            <Download size={16} /> {patching || scanning ? t("android.patching") : t("android.patch")}
           </Button>
         </div>
-        {!props.mods.some((m) => m.enabled) && (
-          <p className="text-xs text-ink-500 dark:text-ink-400">{t("android.needMods")}</p>
+        {!hasMods && (
+          <p className="text-xs text-ink-500 dark:text-ink-400">{t("android.noModsHint")}</p>
         )}
         {needsDrmb && !drmbPath && (
           <p className="text-xs text-amber-700 dark:text-amber-300">{t("android.needDrmb")}</p>
@@ -474,6 +507,32 @@ export function AndroidView(props: { mods: ModSpec[] }) {
           </div>
         )}
       </Card>
+      <Modal open={noModsOpen} onClose={() => setNoModsOpen(false)} title={t("android.noModsTitle")}>
+        <p className="text-[13px] leading-relaxed text-ink-600 dark:text-ink-300">
+          {t("android.noModsBody")}
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button size="sm" variant="ghost" onClick={() => setNoModsOpen(false)}>
+            {t("android.noModsCancel")}
+          </Button>
+          <Button size="sm" variant="primary" onClick={() => void doPatch()}>
+            {t("android.noModsContinue")}
+          </Button>
+        </div>
+      </Modal>
+      <Modal open={smaliOpen} onClose={() => setSmaliOpen(false)} title={t("android.smaliTitle")}>
+        <p className="text-[13px] leading-relaxed text-ink-600 dark:text-ink-300">
+          {t("android.smaliBody", { n: smaliFiles })}
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button size="sm" variant="ghost" onClick={() => setSmaliOpen(false)}>
+            {t("android.smaliCancel")}
+          </Button>
+          <HoldButton durationMs={5000} onDone={() => void doPatch()}>
+            {t("android.smaliHold")}
+          </HoldButton>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { sound } from "../lib/sound";
+import { Modal } from "../components/Modal";
 import { FolderOpen, Download, ShieldCheck, Smartphone } from "lucide-react";
 import { IpaInfo, ModInfo, ModSpec, api, fmtBytes, humanizeError, modInfoKey, onProgress } from "../lib/tauri";
 import type { AppleAccount } from "../lib/tauri";
@@ -76,10 +77,22 @@ export function IosView(props: {
     .map((m) => props.modInfos[modInfoKey(m)]?.config.appName)
     .find((n): n is string => !!n && n.trim().length > 0);
 
-  const canPatch = ipaPath && props.mods.some((m) => m.enabled) && !patching;
+  const hasMods = props.mods.some((m) => m.enabled);
+  const [noModsOpen, setNoModsOpen] = useState(false);
+  const canPatch = ipaPath && !patching;
 
   async function runPatch() {
     if (!ipaPath || !canPatch) return;
+    if (!hasMods) {
+      setNoModsOpen(true);
+      return;
+    }
+    await doPatch();
+  }
+
+  async function doPatch() {
+    if (!ipaPath) return;
+    setNoModsOpen(false);
     setPatching(true);
     setSteps([]);
     setError(null);
@@ -234,8 +247,8 @@ export function IosView(props: {
             <Download size={16} /> {patching ? t("ios.patching") : t("ios.patch")}
           </Button>
         </div>
-        {!props.mods.some((m) => m.enabled) && (
-          <p className="text-xs text-ink-500 dark:text-ink-400">{t("ios.needMods")}</p>
+        {!hasMods && (
+          <p className="text-xs text-ink-500 dark:text-ink-400">{t("ios.noModsHint")}</p>
         )}
         {patching && <ProgressBar value={progress} />}
         <StepsLog steps={steps} error={error} />
@@ -299,6 +312,19 @@ export function IosView(props: {
           </div>
         )}
       </Card>
+      <Modal open={noModsOpen} onClose={() => setNoModsOpen(false)} title={t("ios.noModsTitle")}>
+        <p className="text-[13px] leading-relaxed text-ink-600 dark:text-ink-300">
+          {t("ios.noModsBody")}
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button size="sm" variant="ghost" onClick={() => setNoModsOpen(false)}>
+            {t("ios.noModsCancel")}
+          </Button>
+          <Button size="sm" variant="primary" onClick={() => void doPatch()}>
+            {t("ios.noModsContinue")}
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

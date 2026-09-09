@@ -1,3 +1,5 @@
+#![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
+
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{Read, Write};
@@ -1299,7 +1301,12 @@ async fn download_mods_to_dir(
     let mut reports: Vec<ModReport> = Vec::new();
     let enabled: Vec<&ModSpec> = mods.iter().filter(|m| m.enabled).collect();
     if enabled.is_empty() {
-        return Err("No active mods. Add at least one repository or ZIP.".to_string());
+        return Ok(ModsDownload {
+            config: merged,
+            files: 0,
+            skipped,
+            reports,
+        });
     }
 
     for (idx, m) in enabled.iter().enumerate() {
@@ -1416,15 +1423,17 @@ async fn download_mods_to_dir(
         );
     }
 
-    if total_files == 0 {
-        return Err("No patch files downloaded. Check the mods.".to_string());
-    }
     Ok(ModsDownload {
         config: merged,
         files: total_files,
         skipped,
         reports,
     })
+}
+
+fn mod_has_smali_path(path: &str) -> bool {
+    let lower = path.replace('\\', "/").to_lowercase();
+    lower.ends_with(".smali") || lower.split('/').any(|seg| seg == "smali")
 }
 
 fn extract_local_mod_zip(zip_path: &Path, dest: &Path, platform: &str) -> Result<ModFetch, String> {
@@ -1508,6 +1517,56 @@ struct ModInfo {
     file_count: usize,
     stars: Option<u32>,
     source_url: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ModSmaliInfo {
+    has_smali: bool,
+    smali_files: usize,
+}
+
+#[tauri::command]
+async fn inspect_mod_smali(spec: ModSpec) -> Result<ModSmaliInfo, String> {
+    if spec.kind == "github" {
+        let mut parts = spec.repo.split('/');
+        let owner = parts.next().unwrap_or("").trim();
+        let repo = parts.next().unwrap_or("").trim();
+        let branch = if spec.branch.trim().is_empty() {
+            "main"
+        } else {
+            spec.branch.trim()
+        };
+        if owner.is_empty() || repo.is_empty() {
+            return Err(format!("Invalid repository: {}", spec.repo));
+        }
+        let files =
+            list_github_files(owner.to_string(), repo.to_string(), branch.to_string()).await?;
+        let hits = files.iter().filter(|p| mod_has_smali_path(p)).count();
+        return Ok(ModSmaliInfo {
+            has_smali: hits > 0,
+            smali_files: hits,
+        });
+    }
+    if spec.kind == "zip" {
+        let mut archive = zip::ZipArchive::new(
+            File::open(Path::new(&spec.path)).map_err(|e| format!("Cannot open ZIP: {e}"))?,
+        )
+        .map_err(|_| "Not a valid mod ZIP".to_string())?;
+        let mut hits = 0usize;
+        for i in 0..archive.len() {
+            if let Ok(f) = archive.by_index(i) {
+                if !f.is_dir() && mod_has_smali_path(f.name()) {
+                    hits += 1;
+                }
+            }
+        }
+        return Ok(ModSmaliInfo {
+            has_smali: hits > 0,
+            smali_files: hits,
+        });
+    }
+    Err(format!("Unsupported mod type: {}", spec.kind))
 }
 
 #[tauri::command]
@@ -3590,9 +3649,6 @@ async fn patch_ios(app: AppHandle, req: IosPatchRequest) -> Result<IosPatchResul
     let mods_dir = work.join("mods");
     fs::create_dir_all(&mods_dir).map_err(|e| format!("{e}"))?;
     let dl = download_mods_to_dir(&app, &req.mods, &mods_dir, "ios").await?;
-    if dl.files == 0 {
-        return Err("No patch files.".to_string());
-    }
     let mut warnings: Vec<String> = Vec::new();
     if !dl.skipped.is_empty() {
         warnings.push(format!(
@@ -4918,6 +4974,15 @@ mod tests {
     }
 
     #[test]
+    fn mod_smali_path_detection() {
+        assert!(mod_has_smali_path("smali/com/a/B.smali"));
+        assert!(mod_has_smali_path("YW1MESP-main/smali/jp/Foo.smali"));
+        assert!(mod_has_smali_path("assets/data/x.smali"));
+        assert!(!mod_has_smali_path("assets/data/text/a.cfg.bin"));
+        assert!(!mod_has_smali_path("README.md"));
+    }
+
+    #[test]
     fn verbatim_copy_strips_drmb_split_prefix() {
         use std::io::Cursor;
         let mut src_buf = Cursor::new(Vec::new());
@@ -5138,7 +5203,7 @@ fn parse_cli_mods(mods: &[String], zips: &[String]) -> Result<Vec<ModSpec>, Stri
         });
     }
     if out.is_empty() {
-        return Err("No mods given. Use --mod owner/repo[@branch] or --zip file.zip.".to_string());
+        return Ok(out);
     }
     Ok(out)
 }
@@ -5260,6 +5325,14 @@ fn run_cli(cmd: CliCommand) -> Result<(), String> {
 }
 
 fn main() {
+    #[cfg(target_os = "windows")]
+    if std::env::args().len() > 1 {
+        unsafe {
+            windows_sys::Win32::System::Console::AttachConsole(
+                windows_sys::Win32::System::Console::ATTACH_PARENT_PROCESS,
+            );
+        }
+    }
     match Cli::try_parse() {
         Ok(cli) if cli.command.is_some() => {
             if let Err(e) = run_cli(cli.command.unwrap()) {
@@ -5282,6 +5355,7 @@ fn main() {
             list_github_files,
             fetch_remote_config,
             mod_info,
+            inspect_mod_smali,
             patch_android,
             patch_ios,
             tool_status,

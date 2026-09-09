@@ -161,6 +161,8 @@ export const api = {
   listGithubFiles: (owner: string, repo: string, branch: string) =>
     invoke<string[]>("list_github_files", { owner, repo, branch }),
   modInfo: (spec: ModSpec) => invoke<ModInfo>("mod_info", { spec }),
+  inspectModSmali: (spec: ModSpec) =>
+    invoke<{ hasSmali: boolean; smaliFiles: number }>("inspect_mod_smali", { spec }),
   patchAndroid: (req: {
     apksPath: string;
     drmbPath?: string | null;
