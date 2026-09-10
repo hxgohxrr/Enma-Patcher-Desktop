@@ -2731,10 +2731,7 @@ async fn sign_apk(
     if uber_path.is_some() {
         if let Some(uber) = uber_path.as_ref() {
             emit(app, "sign", "Signing with uber-apk-signer...", 0, 1);
-            let uber_out = unsigned
-                .parent()
-                .unwrap_or(Path::new("."))
-                .join("uber-out");
+            let uber_out = unsigned.parent().unwrap_or(Path::new(".")).join("uber-out");
             clear_dir_contents(&uber_out)?;
             let mut args: Vec<String> = java_base_args(unsigned.parent());
             args.extend([
