@@ -136,11 +136,20 @@ cargo clippy       # advisory (some pre-existing lints remain)
 Layout: `src/` (React), `src-tauri/src/main.rs` (whole backend: Android/iOS
 patching, signing, accounts, tools, CLI), `src/i18n/locales/` (6 languages).
 
+Linux prerequisites (Debian/Ubuntu) for `tauri dev` / `tauri build`:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+  libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+```
+
 ## CI and releases
 
-Every push/PR builds on GitHub Actions (Windows + macOS). To publish: push
-a `vX.Y.Z` tag and CI attaches the installers to an automatic draft Release.
-See `.github/workflows/build.yml`.
+Every push/PR builds on GitHub Actions (Windows + macOS + Linux). To
+publish: push a `vX.Y.Z` tag and CI attaches the installers (MSI, NSIS .exe,
+standalone `.exe`, DMG, deb, AppImage) to an automatic draft Release. See
+`.github/workflows/build.yml`.
 
 ## Security
 
