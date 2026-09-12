@@ -12,6 +12,15 @@ function normRepo(s: string): string {
   return s.trim().toLowerCase().split("@")[0].replace(/\/+$/, "");
 }
 
+function consoleLabel(c: string): string {
+  const l = c.trim().toLowerCase();
+  if (l === "switch") return "Switch";
+  if (l === "3ds") return "3DS";
+  if (l === "android") return "Android";
+  if (l === "ios") return "iOS";
+  return c.trim();
+}
+
 function DetailRow(props: { k: string; children: React.ReactNode }) {
   return (
     <div className="grid grid-cols-[128px_1fr] gap-2 border-b border-ink-100 py-1.5 text-[13px] last:border-0 dark:border-white/5">
@@ -70,6 +79,20 @@ function ModDetails(props: { mod: ModSpec; info?: ModInfo; onClose: () => void }
           <span className="tabular">{info ? info.fileCount : "—"}</span>
         </DetailRow>
         {cfg?.appName && <DetailRow k="appName">{cfg.appName}</DetailRow>}
+        {cfg?.console && <DetailRow k="console">{consoleLabel(cfg.console)}</DetailRow>}
+        {info?.blocked && (
+          <DetailRow k="status">
+            <Badge tone="bad">{t("mods.blocked")}</Badge>
+          </DetailRow>
+        )}
+        {info && (info.hasPatches || info.hasNestedMods) && (
+          <DetailRow k="contains">
+            <span className="flex flex-wrap gap-1.5">
+              {info.hasPatches && <Badge tone="warn">{t("mods.usesPatches")}</Badge>}
+              {info.hasNestedMods && <Badge tone="info">{t("mods.usesNestedMods")}</Badge>}
+            </span>
+          </DetailRow>
+        )}
         {cfg?.version && <DetailRow k="version">{cfg.version}</DetailRow>}
         {cfg?.recommendedVersion && <DetailRow k="recommended_version">{cfg.recommendedVersion}</DetailRow>}
         {cfg && cfg.testedVersions.length > 0 && (
@@ -225,8 +248,9 @@ export function ModsEditor(props: {
             <Card key={i} className="space-y-2 p-3">
               <div className="flex items-center gap-3">
                 <button
-                  className="pressable text-ink-400 hover:text-ink-700 dark:hover:text-ink-200"
-                  title={m.enabled ? t("mods.disable") : t("mods.enable")}
+                  className="pressable text-ink-400 hover:text-ink-700 dark:hover:text-ink-200 disabled:pointer-events-none disabled:opacity-40"
+                  title={info?.blocked ? t("mods.blocked") : m.enabled ? t("mods.disable") : t("mods.enable")}
+                  disabled={info?.blocked}
                   onClick={() => {
                     const next = [...props.mods];
                     next[i] = { ...m, enabled: !m.enabled };
@@ -273,6 +297,10 @@ export function ModsEditor(props: {
                   />
                   <AppleMark size={12} className={cfg && !cfg.platforms.ios ? "opacity-30" : ""} />
                 </span>
+                {info?.blocked && <Badge tone="bad">{t("mods.blocked")}</Badge>}
+                {cfg?.console && <Badge tone="info">{consoleLabel(cfg.console)}</Badge>}
+                {info?.hasPatches && <Badge tone="warn">{t("mods.usesPatches")}</Badge>}
+                {info?.hasNestedMods && <Badge tone="info">{t("mods.usesNestedMods")}</Badge>}
                 {cfg?.aiContent && <Badge tone="warn">AI Usage Present</Badge>}
                 {cfg?.license && <Badge tone="neutral">{cfg.license}</Badge>}
                 {cfg?.recommendedVersion && (

@@ -11,6 +11,7 @@ export interface ModSpec {
 
 export interface ModConfig {
   appName: string | null;
+  console: string | null;
   currentLabel: string | null;
   version: string | null;
   include: string[];
@@ -34,6 +35,10 @@ export interface ModInfo {
   fileCount: number;
   stars: number | null;
   sourceUrl: string | null;
+  hasPatches: boolean;
+  hasNestedMods: boolean;
+  console: string | null;
+  blocked: boolean;
 }
 
 export function modInfoKey(m: ModSpec): string {

@@ -1005,6 +1005,8 @@ struct EnmaCfg {
     license: Option<String>,
     #[serde(default, alias = "renameassets", alias = "rename_assets")]
     rename_assets: Option<bool>,
+    #[serde(default, alias = "Console")]
+    console: Option<String>,
 }
 
 fn platform_enabled(cfg: &EnmaCfg, platform: &str) -> bool {
@@ -1043,6 +1045,7 @@ struct ModFetch {
     config: EnmaCfg,
     files: usize,
     skipped_platform: bool,
+    blocked: bool,
 }
 
 struct ModReport {
@@ -1055,6 +1058,8 @@ struct ModsDownload {
     files: usize,
     skipped: Vec<String>,
     reports: Vec<ModReport>,
+    notes: Vec<String>,
+    blocked: Vec<String>,
 }
 
 async fn download_github_zip(
@@ -1157,6 +1162,17 @@ async fn download_github_zip(
         }
     }
     let _ = fs::remove_file(&zip_path);
+    if rels.iter().any(|r| is_enmaignore(r)) {
+        for rel in &rels {
+            let _ = fs::remove_file(dest.join(rel));
+        }
+        return Ok(ModFetch {
+            config: cfg,
+            files: 0,
+            skipped_platform: false,
+            blocked: true,
+        });
+    }
     if !platform_enabled(&cfg, platform) {
         for rel in &rels {
             let _ = fs::remove_file(dest.join(rel));
@@ -1165,6 +1181,7 @@ async fn download_github_zip(
             config: cfg,
             files: 0,
             skipped_platform: true,
+            blocked: false,
         });
     }
     let (inc, exc) = effective_filters(&cfg, platform);
@@ -1180,6 +1197,7 @@ async fn download_github_zip(
         config: cfg,
         files: kept,
         skipped_platform: false,
+        blocked: false,
     })
 }
 
@@ -1210,10 +1228,19 @@ async fn download_github_raw(
             config: remote_cfg,
             files: 0,
             skipped_platform: true,
+            blocked: false,
         });
     }
     let (inc, exc) = effective_filters(&remote_cfg, platform);
     let files = list_github_files(owner.to_string(), repo.to_string(), branch.to_string()).await?;
+    if files.iter().any(|p| is_enmaignore(p)) {
+        return Ok(ModFetch {
+            config: remote_cfg,
+            files: 0,
+            skipped_platform: false,
+            blocked: true,
+        });
+    }
     let targets: Vec<String> = files
         .into_iter()
         .filter(|p| p != "enmapatcher.cfg.json" && keep_path(p, &inc, &exc))
@@ -1250,6 +1277,7 @@ async fn download_github_raw(
         config: remote_cfg,
         files: count,
         skipped_platform: false,
+        blocked: false,
     })
 }
 
@@ -1289,6 +1317,9 @@ fn merge_mod_config(merged: &mut EnmaCfg, cfg: EnmaCfg) {
     } else if cfg.rename_assets == Some(false) && merged.rename_assets.is_none() {
         merged.rename_assets = Some(false);
     }
+    if merged.console.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
+        merged.console = cfg.console;
+    }
 }
 
 async fn download_mods_to_dir(
@@ -1302,33 +1333,48 @@ async fn download_mods_to_dir(
     let mut total_files = 0usize;
     let mut skipped: Vec<String> = Vec::new();
     let mut reports: Vec<ModReport> = Vec::new();
-    let enabled: Vec<&ModSpec> = mods.iter().filter(|m| m.enabled).collect();
-    if enabled.is_empty() {
+    let mut notes: Vec<String> = Vec::new();
+    let mut blocked: Vec<String> = Vec::new();
+    let mut queue: Vec<(ModSpec, String, usize)> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    for m in mods.iter().filter(|m| m.enabled) {
+        let label = if m.kind == "github" {
+            format!("{}/{}@{}", m.repo, m.branch, queue.len() + 1)
+        } else {
+            file_name_of(Path::new(&m.path))
+        };
+        seen.insert(nested_mod_key(m));
+        queue.push((m.clone(), label, 0));
+    }
+    if queue.is_empty() {
         return Ok(ModsDownload {
             config: merged,
             files: 0,
             skipped,
             reports,
+            notes,
+            blocked,
         });
     }
 
-    for (idx, m) in enabled.iter().enumerate() {
-        let label = if m.kind == "github" {
-            format!("{}/{}@{}", m.repo, m.branch, idx + 1)
-        } else {
-            file_name_of(Path::new(&m.path))
-        };
+    let mut qi = 0usize;
+    while qi < queue.len() {
+        let item = queue[qi].clone();
+        qi += 1;
+        let m = &item.0;
+        let label = item.1.clone();
+        let idx = qi - 1;
         emit(
             app,
             "download",
             &format!(
                 "Downloading mod {} of {}: {}",
                 idx + 1,
-                enabled.len(),
+                queue.len(),
                 label
             ),
             idx,
-            enabled.len(),
+            queue.len(),
         );
 
         if m.kind == "github" {
@@ -1363,7 +1409,7 @@ async fn download_mods_to_dir(
                         "download",
                         &format!("ZIP unavailable, downloading file by file ({e})"),
                         idx,
-                        enabled.len(),
+                        queue.len(),
                     );
                 }
             }
@@ -1377,7 +1423,7 @@ async fn download_mods_to_dir(
                     dest,
                     platform,
                     idx,
-                    enabled.len(),
+                    queue.len(),
                     &label,
                 )
                 .await
@@ -1393,6 +1439,9 @@ async fn download_mods_to_dir(
             if let Some(f) = fetch {
                 if f.skipped_platform {
                     skipped.push(label.clone());
+                } else if f.blocked {
+                    blocked.push(label.clone());
+                    emit(app, "download", &format!("Blocked by enmaignore: {label}"), qi, queue.len());
                 } else {
                     reports.push(ModReport {
                         label: label.clone(),
@@ -1406,6 +1455,9 @@ async fn download_mods_to_dir(
             let fetch = extract_local_mod_zip(Path::new(&m.path), dest, platform)?;
             if fetch.skipped_platform {
                 skipped.push(label.clone());
+            } else if fetch.blocked {
+                blocked.push(label.clone());
+                emit(app, "download", &format!("Blocked by enmaignore: {label}"), qi, queue.len());
             } else {
                 reports.push(ModReport {
                     label: label.clone(),
@@ -1417,12 +1469,34 @@ async fn download_mods_to_dir(
         } else {
             return Err(format!("Unsupported mod type: {}", m.kind));
         }
+        if item.2 < 3 {
+            let (nested_specs, nested_err) = collect_nested_specs(dest);
+            if let Some(e) = nested_err {
+                notes.push(format!("{label}: {e}"));
+            }
+            for spec in nested_specs {
+                if !spec.enabled {
+                    continue;
+                }
+                if !seen.insert(nested_mod_key(&spec)) {
+                    continue;
+                }
+                let nested_label = format!("{}/{} (nested)", spec.repo, spec.branch);
+                notes.push(format!("Includes nested mod: {nested_label}"));
+                queue.push((spec, nested_label, item.2 + 1));
+            }
+        } else {
+            let (extra, _) = collect_nested_specs(dest);
+            if !extra.is_empty() {
+                notes.push(format!("{label}: nested mods beyond depth 3 skipped"));
+            }
+        }
         emit(
             app,
             "download",
             &format!("Mod ready: {label}"),
             idx + 1,
-            enabled.len(),
+            queue.len(),
         );
     }
 
@@ -1431,12 +1505,310 @@ async fn download_mods_to_dir(
         files: total_files,
         skipped,
         reports,
+        notes,
+        blocked,
     })
 }
 
 fn mod_has_smali_path(path: &str) -> bool {
     let lower = path.replace('\\', "/").to_lowercase();
     lower.ends_with(".smali") || lower.split('/').any(|seg| seg == "smali")
+}
+
+fn mod_console_label(console: Option<&str>) -> Option<String> {
+    let raw = console?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    Some(match raw.to_lowercase().as_str() {
+        "switch" => "Switch".to_string(),
+        "3ds" => "3DS".to_string(),
+        "android" => "Android".to_string(),
+        "ios" => "iOS".to_string(),
+        _ => raw.to_string(),
+    })
+}
+
+fn is_enmaignore(name: &str) -> bool {
+    name.replace('\\', "/")
+        .rsplit('/')
+        .next()
+        .unwrap_or("")
+        .to_lowercase()
+        == "enmaignore"
+}
+
+fn scan_mod_tree(names: &[String]) -> (bool, bool, bool) {
+    let mut out = (false, false, false);
+    for n in names {
+        let lower = n.replace('\\', "/").to_lowercase();
+        if is_enmaignore(&lower) {
+            out.2 = true;
+        }
+        if lower.ends_with(".ips") && lower.split('/').any(|seg| seg == "patches") {
+            out.0 = true;
+        }
+        if lower == "mods/mods.json" || lower.ends_with("/mods/mods.json") {
+            out.1 = true;
+        }
+    }
+    out
+}
+
+fn parse_nested_mods(text: &str) -> Vec<ModSpec> {
+    let value: serde_json::Value = serde_json::from_str(text).unwrap_or_default();
+    let items = value
+        .get("mods")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let mut out = Vec::new();
+    for entry in items {
+        if let Some(raw) = entry.as_str() {
+            let (repo, branch) = match raw.split_once('@') {
+                Some((r, b)) => (r.trim(), b.trim()),
+                None => (raw.trim(), "main"),
+            };
+            if repo.is_empty() || !repo.contains('/') {
+                continue;
+            }
+            out.push(ModSpec {
+                kind: "github".to_string(),
+                repo: repo.to_string(),
+                branch: if branch.is_empty() {
+                    "main".to_string()
+                } else {
+                    branch.to_string()
+                },
+                path: String::new(),
+                enabled: true,
+            });
+            continue;
+        }
+        let repo = entry
+            .get("repo")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
+        if repo.is_empty() || !repo.contains('/') {
+            continue;
+        }
+        let branch = entry
+            .get("branch")
+            .and_then(|v| v.as_str())
+            .unwrap_or("main")
+            .trim();
+        out.push(ModSpec {
+            kind: "github".to_string(),
+            repo: repo.to_string(),
+            branch: if branch.is_empty() {
+                "main".to_string()
+            } else {
+                branch.to_string()
+            },
+            path: String::new(),
+            enabled: entry.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true),
+        });
+    }
+    out
+}
+
+fn nested_mod_key(spec: &ModSpec) -> String {
+    format!("{}:{}@{}", spec.kind, spec.repo, spec.branch)
+}
+
+fn collect_nested_specs(dest: &Path) -> (Vec<ModSpec>, Option<String>) {
+    let manifest = dest.join("mods").join("mods.json");
+    if !manifest.exists() {
+        return (Vec::new(), None);
+    }
+    let text = match fs::read_to_string(&manifest) {
+        Ok(t) => t,
+        Err(e) => {
+            return (
+                Vec::new(),
+                Some(format!("Cannot read mods/mods.json: {e}")),
+            )
+        }
+    };
+    let _ = fs::remove_file(&manifest);
+    (parse_nested_mods(&text), None)
+}
+
+fn apply_ips(base: &[u8], patch: &[u8]) -> Result<Vec<u8>, String> {
+    if patch.len() < 8 || &patch[..5] != b"PATCH" {
+        return Err("Not an IPS patch (bad header).".to_string());
+    }
+    let mut out: Vec<u8> = base.to_vec();
+    let mut i = 5usize;
+    loop {
+        if i + 3 > patch.len() {
+            return Err("Truncated IPS patch.".to_string());
+        }
+        if &patch[i..i + 3] == b"EOF" {
+            i += 3;
+            if patch.len() == i {
+                break;
+            }
+            if patch.len() == i + 3 {
+                let end = ((patch[i] as usize) << 16)
+                    | ((patch[i + 1] as usize) << 8)
+                    | patch[i + 2] as usize;
+                out.truncate(end);
+                break;
+            }
+            return Err("Trailing data after IPS EOF.".to_string());
+        }
+        if i + 5 > patch.len() {
+            return Err("Truncated IPS record.".to_string());
+        }
+        let off = ((patch[i] as usize) << 16)
+            | ((patch[i + 1] as usize) << 8)
+            | patch[i + 2] as usize;
+        let size = ((patch[i + 3] as usize) << 8) | patch[i + 4] as usize;
+        i += 5;
+        if size == 0 {
+            if i + 3 > patch.len() {
+                return Err("Truncated IPS RLE record.".to_string());
+            }
+            let run = ((patch[i] as usize) << 8) | patch[i + 1] as usize;
+            let val = patch[i + 2];
+            i += 3;
+            if run == 0 {
+                return Err("Empty IPS RLE run.".to_string());
+            }
+            let end = off
+                .checked_add(run)
+                .ok_or("IPS offset overflow.".to_string())?;
+            if end > 256 * 1024 * 1024 {
+                return Err("IPS output too large.".to_string());
+            }
+            if out.len() < end {
+                out.resize(end, 0);
+            }
+            for byte in &mut out[off..end] {
+                *byte = val;
+            }
+        } else {
+            if i + size > patch.len() {
+                return Err("Truncated IPS data.".to_string());
+            }
+            let end = off
+                .checked_add(size)
+                .ok_or("IPS offset overflow.".to_string())?;
+            if end > 256 * 1024 * 1024 {
+                return Err("IPS output too large.".to_string());
+            }
+            if out.len() < end {
+                out.resize(end, 0);
+            }
+            out[off..end].copy_from_slice(&patch[i..i + size]);
+            i += size;
+        }
+    }
+    Ok(out)
+}
+
+fn collect_ips_jobs(mods_dir: &Path) -> Vec<(String, PathBuf)> {
+    let mut jobs = Vec::new();
+    let mut stack = vec![mods_dir.join("patches")];
+    while let Some(cur) = stack.pop() {
+        let entries: Vec<PathBuf> = fs::read_dir(&cur)
+            .map(|r| r.filter_map(|e| e.ok()).map(|e| e.path()).collect())
+            .unwrap_or_default();
+        for path in entries {
+            if path.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            let file = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("");
+            if file.len() <= 4 || !file[file.len() - 4..].eq_ignore_ascii_case(".ips") {
+                continue;
+            }
+            if let Ok(rel) = path.strip_prefix(mods_dir) {
+                let rel = rel.to_string_lossy().replace('\\', "/");
+                if let Some(inner) = rel.strip_prefix("patches/") {
+                    let target = &inner[..inner.len() - 4];
+                    if !target.is_empty() {
+                        jobs.push((target.to_string(), path));
+                    }
+                }
+            }
+        }
+    }
+    jobs.sort();
+    jobs
+}
+
+fn apply_ips_android(
+    base_apk: &Path,
+    mods_dir: &Path,
+    work: &Path,
+    overrides: &mut HashMap<String, PathBuf>,
+    notes: &mut Vec<String>,
+) -> Result<(usize, usize), String> {
+    let jobs = collect_ips_jobs(mods_dir);
+    if jobs.is_empty() {
+        return Ok((0, 0));
+    }
+    let out_dir = work.join("ips");
+    fs::create_dir_all(&out_dir).map_err(|e| format!("{e}"))?;
+    let mut base_zip = zip::ZipArchive::new(
+        File::open(base_apk).map_err(|e| format!("{e}"))?,
+    )
+    .map_err(|_| "Cannot read base.apk".to_string())?;
+    let mut applied = 0usize;
+    let mut skipped: Vec<String> = Vec::new();
+    for (target, ips_path) in jobs {
+        let base_bytes: Option<Vec<u8>> = match overrides.get(&target) {
+            Some(p) => fs::read(p).ok(),
+            None => base_zip.by_name(target.as_str()).ok().and_then(|mut f| {
+                let mut b = Vec::new();
+                f.read_to_end(&mut b).ok().map(|_| b)
+            }),
+        };
+        let patch = match fs::read(&ips_path) {
+            Ok(b) => b,
+            Err(_) => {
+                skipped.push(target);
+                continue;
+            }
+        };
+        match base_bytes {
+            None => skipped.push(target),
+            Some(base_bytes) => match apply_ips(&base_bytes, &patch) {
+                Ok(out) => {
+                    let dest = out_dir.join(&target);
+                    if let Some(parent) = dest.parent() {
+                        fs::create_dir_all(parent).map_err(|e| format!("{e}"))?;
+                    }
+                    fs::write(&dest, &out).map_err(|e| format!("{e}"))?;
+                    overrides.insert(target, dest);
+                    applied += 1;
+                }
+                Err(e) => skipped.push(format!("{target} ({e})")),
+            },
+        }
+    }
+    drop(base_zip);
+    if applied > 0 {
+        notes.push(format!("Applied {applied} IPS patch(es)"));
+    }
+    if !skipped.is_empty() {
+        let mut shown: Vec<String> = skipped.iter().take(5).cloned().collect();
+        if skipped.len() > 5 {
+            shown.push(format!("and {} more", skipped.len() - 5));
+        }
+        notes.push(format!(
+            "Skipped {} IPS patch(es), target missing or invalid: {}",
+            skipped.len(),
+            shown.join(", ")
+        ));
+    }
+    Ok((applied, skipped.len()))
 }
 
 fn extract_local_mod_zip(zip_path: &Path, dest: &Path, platform: &str) -> Result<ModFetch, String> {
@@ -1488,6 +1860,17 @@ fn extract_local_mod_zip(zip_path: &Path, dest: &Path, platform: &str) -> Result
         rels.push(name.clone());
     }
     let mut kept = 0usize;
+    if rels.iter().any(|r| is_enmaignore(r)) {
+        for rel in &rels {
+            let _ = fs::remove_file(dest.join(rel));
+        }
+        return Ok(ModFetch {
+            config: cfg,
+            files: 0,
+            skipped_platform: false,
+            blocked: true,
+        });
+    }
     if !platform_enabled(&cfg, platform) {
         for rel in &rels {
             let _ = fs::remove_file(dest.join(rel));
@@ -1496,6 +1879,7 @@ fn extract_local_mod_zip(zip_path: &Path, dest: &Path, platform: &str) -> Result
             config: cfg,
             files: 0,
             skipped_platform: true,
+            blocked: false,
         });
     }
     let (inc, exc) = effective_filters(&cfg, platform);
@@ -1510,6 +1894,7 @@ fn extract_local_mod_zip(zip_path: &Path, dest: &Path, platform: &str) -> Result
         config: cfg,
         files: kept,
         skipped_platform: false,
+        blocked: false,
     })
 }
 
@@ -1520,6 +1905,9 @@ struct ModInfo {
     file_count: usize,
     stars: Option<u32>,
     source_url: Option<String>,
+    has_patches: bool,
+    has_nested_mods: bool,
+    blocked: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -1620,11 +2008,15 @@ async fn mod_info(spec: ModSpec) -> Result<ModInfo, String> {
             }
             Err(_) => (None, Some(format!("https://github.com/{owner}/{repo}"))),
         };
+        let (has_patches, has_nested_mods, blocked) = scan_mod_tree(&files);
         Ok(ModInfo {
             config,
             file_count,
             stars,
             source_url,
+            has_patches,
+            has_nested_mods,
+            blocked,
         })
     } else if spec.kind == "zip" {
         let path = PathBuf::from(&spec.path);
@@ -1643,6 +2035,7 @@ async fn mod_info(spec: ModSpec) -> Result<ModInfo, String> {
         }
         let mut config = EnmaCfg::default();
         let mut file_count = 0usize;
+        let mut names: Vec<String> = Vec::new();
         for i in 0..archive.len() {
             let mut f = archive
                 .by_index(i)
@@ -1659,6 +2052,7 @@ async fn mod_info(spec: ModSpec) -> Result<ModInfo, String> {
             if name.is_empty() {
                 continue;
             }
+            names.push(name.clone());
             if name == "enmapatcher.cfg.json" {
                 let mut text = String::new();
                 f.read_to_string(&mut text).map_err(|e| format!("{e}"))?;
@@ -1667,11 +2061,15 @@ async fn mod_info(spec: ModSpec) -> Result<ModInfo, String> {
             }
             file_count += 1;
         }
+        let (has_patches, has_nested_mods, blocked) = scan_mod_tree(&names);
         Ok(ModInfo {
             config,
             file_count,
             stars: None,
             source_url: None,
+            has_patches,
+            has_nested_mods,
+            blocked,
         })
     } else {
         Err(format!("Unsupported mod type: {}", spec.kind))
@@ -3368,6 +3766,19 @@ async fn patch_android(
             None => msg,
         });
     }
+    if !dl.blocked.is_empty() {
+        let msg = format!("Blocked by enmaignore: {}", dl.blocked.join(", "));
+        warning = Some(match warning.take() {
+            Some(prev) => format!("{prev} {msg}"),
+            None => msg,
+        });
+    }
+    for note in &dl.notes {
+        warning = Some(match warning.take() {
+            Some(prev) => format!("{prev} {note}"),
+            None => note.clone(),
+        });
+    }
 
     emit(&app, "merge", "Merging patch...", 4, 7);
     let mut overrides: HashMap<String, PathBuf> = HashMap::new();
@@ -3377,7 +3788,7 @@ async fn patch_android(
         }
     }
     for (rel, abs) in index_dir_files(&mods_dir) {
-        if rel == "enmapatcher.cfg.json" {
+        if is_mod_meta_file(&rel) {
             continue;
         }
         overrides.insert(rel, abs);
@@ -3392,6 +3803,14 @@ async fn patch_android(
         if let Some(v) = overrides.remove(k) {
             smali_map.insert(k.clone(), v);
         }
+    }
+    let mut ips_notes: Vec<String> = Vec::new();
+    apply_ips_android(&base_apk, &mods_dir, &work, &mut overrides, &mut ips_notes)?;
+    for note in ips_notes {
+        warning = Some(match warning.take() {
+            Some(prev) => format!("{prev} {note}"),
+            None => note,
+        });
     }
 
     let split_names: HashSet<String> = drmb
@@ -3637,10 +4056,18 @@ fn ios_main_executable(archive: &mut zip::ZipArchive<File>, app_dir: &str) -> Op
     Some(format!("{app_dir}/{exe}"))
 }
 
+fn is_mod_meta_file(rel: &str) -> bool {
+    rel == "enmapatcher.cfg.json"
+        || rel == "patches"
+        || rel.starts_with("patches/")
+        || rel == "mods"
+        || rel.starts_with("mods/")
+}
+
 fn collect_mod_files_indexed(mods_dir: &Path) -> HashMap<String, PathBuf> {
     index_dir_files(mods_dir)
         .into_iter()
-        .filter(|(k, _)| k != "enmapatcher.cfg.json")
+        .filter(|(k, _)| !is_mod_meta_file(k))
         .collect()
 }
 
@@ -3673,6 +4100,10 @@ async fn patch_ios(app: AppHandle, req: IosPatchRequest) -> Result<IosPatchResul
             dl.skipped.join(", ")
         ));
     }
+    if !dl.blocked.is_empty() {
+        warnings.push(format!("Blocked by enmaignore: {}", dl.blocked.join(", ")));
+    }
+    warnings.extend(dl.notes.clone());
     if let Some(game_v) = info.version.as_deref() {
         for r in &dl.reports {
             if r.config.incompatible_versions.iter().any(|v| v == game_v) {
@@ -3737,6 +4168,81 @@ async fn patch_ios(app: AppHandle, req: IosPatchRequest) -> Result<IosPatchResul
         }
         let bytes = fs::read(&mod_index[mod_rel]).map_err(|e| format!("{e}"))?;
         dest_bytes.insert(dest.clone(), bytes);
+    }
+
+    {
+        let jobs = collect_ips_jobs(&mods_dir);
+        let mut applied = 0usize;
+        let mut skipped: Vec<String> = Vec::new();
+        for (target, ips_path) in jobs {
+            let mut candidates: Vec<String> = Vec::new();
+            if should_rename {
+                if let Some(stripped) = target.strip_prefix("assets/") {
+                    candidates.push(format!("{}/data/{}", info.app_dir, stripped));
+                }
+            }
+            candidates.push(target.clone());
+            candidates.push(format!("{}/{}", info.app_dir, target));
+            let mut dest_opt: Option<String> = None;
+            for candidate in &candidates {
+                if entry_set.contains(candidate.as_str()) {
+                    dest_opt = Some(candidate.clone());
+                    break;
+                }
+            }
+            if dest_opt.is_none() {
+                if let Some(mapped) = dest_for_mod.get(&target) {
+                    if !is_stale_ios_signature(&info.app_dir, mapped) {
+                        dest_opt = Some(mapped.clone());
+                    }
+                }
+            }
+            let dest = match dest_opt {
+                Some(d) => d,
+                None => {
+                    skipped.push(target);
+                    continue;
+                }
+            };
+            let base_bytes: Option<Vec<u8>> =
+                dest_bytes.get(&dest).cloned().or_else(|| {
+                    archive.by_name(dest.as_str()).ok().and_then(|mut f| {
+                        let mut b = Vec::new();
+                        f.read_to_end(&mut b).ok().map(|_| b)
+                    })
+                });
+            let patch = match fs::read(&ips_path) {
+                Ok(b) => b,
+                Err(_) => {
+                    skipped.push(target);
+                    continue;
+                }
+            };
+            match base_bytes {
+                None => skipped.push(target),
+                Some(base_bytes) => match apply_ips(&base_bytes, &patch) {
+                    Ok(out) => {
+                        dest_bytes.insert(dest, out);
+                        applied += 1;
+                    }
+                    Err(e) => skipped.push(format!("{target} ({e})")),
+                },
+            }
+        }
+        if applied > 0 {
+            warnings.push(format!("Applied {applied} IPS patch(es)"));
+        }
+        if !skipped.is_empty() {
+            let mut shown: Vec<String> = skipped.iter().take(5).cloned().collect();
+            if skipped.len() > 5 {
+                shown.push(format!("and {} more", skipped.len() - 5));
+            }
+            warnings.push(format!(
+                "Skipped {} IPS patch(es), target missing or invalid: {}",
+                skipped.len(),
+                shown.join(", ")
+            ));
+        }
     }
 
     let display_name: Option<String> = req
@@ -4996,6 +5502,62 @@ mod tests {
         assert!(mod_has_smali_path("assets/data/x.smali"));
         assert!(!mod_has_smali_path("assets/data/text/a.cfg.bin"));
         assert!(!mod_has_smali_path("README.md"));
+    }
+
+    #[test]
+    fn ips_apply_replace_rle_extend_truncate() {
+        let base = vec![0u8, 1, 2, 3, 4, 5, 6, 7];
+        let mut patch = b"PATCH".to_vec();
+        patch.extend([0, 0, 2, 0, 2, 0xAA, 0xBB]);
+        patch.extend([0, 0, 4, 0, 0, 0, 3, 0xFF]);
+        patch.extend(b"EOF");
+        assert_eq!(
+            apply_ips(&base, &patch).unwrap(),
+            vec![0, 1, 0xAA, 0xBB, 0xFF, 0xFF, 0xFF, 7]
+        );
+        let mut ext = b"PATCH".to_vec();
+        ext.extend([0, 0, 10, 0, 2, 9, 9]);
+        ext.extend(b"EOF");
+        let grown = apply_ips(&[1, 2], &ext).unwrap();
+        assert_eq!(grown.len(), 12);
+        assert_eq!(&grown[10..], &[9, 9]);
+        let mut trunc = b"PATCH".to_vec();
+        trunc.extend(b"EOF");
+        trunc.extend([0, 0, 2]);
+        assert_eq!(apply_ips(&[1, 2, 3, 4], &trunc).unwrap(), vec![1, 2]);
+        assert!(apply_ips(&base, b"NOPE").is_err());
+        assert!(apply_ips(&base, b"PATCH").is_err());
+        let mut noeof = b"PATCH".to_vec();
+        noeof.extend([0, 0, 0, 0, 1, 0]);
+        assert!(apply_ips(&base, &noeof).is_err());
+    }
+
+    #[test]
+    fn nested_manifest_and_tree_scan() {
+        let specs = parse_nested_mods(
+            r#"{"mods": [{"repo": "A/B", "branch": "dev"}, "C/D@main", {"repo": "bad"}, "nope"]}"#,
+        );
+        assert_eq!(specs.len(), 2);
+        assert_eq!(specs[0].repo, "A/B");
+        assert_eq!(specs[0].branch, "dev");
+        assert_eq!(specs[1].repo, "C/D");
+        assert_eq!(specs[1].branch, "main");
+        assert!(parse_nested_mods("not json").is_empty());
+        assert!(parse_nested_mods("{}").is_empty());
+        let names = vec![
+            "patches/assets/a.bin.ips".to_string(),
+            "mods/mods.json".to_string(),
+            "assets/x.bin".to_string(),
+        ];
+        assert_eq!(scan_mod_tree(&names), (true, true, false));
+        assert!(is_enmaignore("enmaignore"));
+        assert!(is_enmaignore("sub/ENMAIGNORE"));
+        assert!(!is_enmaignore("enmaignore.txt"));
+        assert!(!is_enmaignore("assets/x.bin"));
+        assert_eq!(mod_console_label(Some("switch")), Some("Switch".to_string()));
+        assert_eq!(mod_console_label(Some(" 3DS ")), Some("3DS".to_string()));
+        assert_eq!(mod_console_label(None), None);
+        assert_eq!(mod_console_label(Some("  ")), None);
     }
 
     #[test]
