@@ -1317,7 +1317,12 @@ fn merge_mod_config(merged: &mut EnmaCfg, cfg: EnmaCfg) {
     } else if cfg.rename_assets == Some(false) && merged.rename_assets.is_none() {
         merged.rename_assets = Some(false);
     }
-    if merged.console.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
+    if merged
+        .console
+        .as_ref()
+        .map(|s| s.is_empty())
+        .unwrap_or(true)
+    {
         merged.console = cfg.console;
     }
 }
@@ -1367,12 +1372,7 @@ async fn download_mods_to_dir(
         emit(
             app,
             "download",
-            &format!(
-                "Downloading mod {} of {}: {}",
-                idx + 1,
-                queue.len(),
-                label
-            ),
+            &format!("Downloading mod {} of {}: {}", idx + 1, queue.len(), label),
             idx,
             queue.len(),
         );
@@ -1441,7 +1441,13 @@ async fn download_mods_to_dir(
                     skipped.push(label.clone());
                 } else if f.blocked {
                     blocked.push(label.clone());
-                    emit(app, "download", &format!("Blocked by enmaignore: {label}"), qi, queue.len());
+                    emit(
+                        app,
+                        "download",
+                        &format!("Blocked by enmaignore: {label}"),
+                        qi,
+                        queue.len(),
+                    );
                 } else {
                     reports.push(ModReport {
                         label: label.clone(),
@@ -1457,7 +1463,13 @@ async fn download_mods_to_dir(
                 skipped.push(label.clone());
             } else if fetch.blocked {
                 blocked.push(label.clone());
-                emit(app, "download", &format!("Blocked by enmaignore: {label}"), qi, queue.len());
+                emit(
+                    app,
+                    "download",
+                    &format!("Blocked by enmaignore: {label}"),
+                    qi,
+                    queue.len(),
+                );
             } else {
                 reports.push(ModReport {
                     label: label.clone(),
@@ -1607,7 +1619,10 @@ fn parse_nested_mods(text: &str) -> Vec<ModSpec> {
                 branch.to_string()
             },
             path: String::new(),
-            enabled: entry.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true),
+            enabled: entry
+                .get("enabled")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true),
         });
     }
     out
@@ -1624,12 +1639,7 @@ fn collect_nested_specs(dest: &Path) -> (Vec<ModSpec>, Option<String>) {
     }
     let text = match fs::read_to_string(&manifest) {
         Ok(t) => t,
-        Err(e) => {
-            return (
-                Vec::new(),
-                Some(format!("Cannot read mods/mods.json: {e}")),
-            )
-        }
+        Err(e) => return (Vec::new(), Some(format!("Cannot read mods/mods.json: {e}"))),
     };
     let _ = fs::remove_file(&manifest);
     (parse_nested_mods(&text), None)
@@ -1662,9 +1672,8 @@ fn apply_ips(base: &[u8], patch: &[u8]) -> Result<Vec<u8>, String> {
         if i + 5 > patch.len() {
             return Err("Truncated IPS record.".to_string());
         }
-        let off = ((patch[i] as usize) << 16)
-            | ((patch[i + 1] as usize) << 8)
-            | patch[i + 2] as usize;
+        let off =
+            ((patch[i] as usize) << 16) | ((patch[i + 1] as usize) << 8) | patch[i + 2] as usize;
         let size = ((patch[i + 3] as usize) << 8) | patch[i + 4] as usize;
         i += 5;
         if size == 0 {
@@ -1721,10 +1730,7 @@ fn collect_ips_jobs(mods_dir: &Path) -> Vec<(String, PathBuf)> {
                 stack.push(path);
                 continue;
             }
-            let file = path
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("");
+            let file = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
             if file.len() <= 4 || !file[file.len() - 4..].eq_ignore_ascii_case(".ips") {
                 continue;
             }
@@ -1756,10 +1762,8 @@ fn apply_ips_android(
     }
     let out_dir = work.join("ips");
     fs::create_dir_all(&out_dir).map_err(|e| format!("{e}"))?;
-    let mut base_zip = zip::ZipArchive::new(
-        File::open(base_apk).map_err(|e| format!("{e}"))?,
-    )
-    .map_err(|_| "Cannot read base.apk".to_string())?;
+    let mut base_zip = zip::ZipArchive::new(File::open(base_apk).map_err(|e| format!("{e}"))?)
+        .map_err(|_| "Cannot read base.apk".to_string())?;
     let mut applied = 0usize;
     let mut skipped: Vec<String> = Vec::new();
     for (target, ips_path) in jobs {
@@ -4204,13 +4208,12 @@ async fn patch_ios(app: AppHandle, req: IosPatchRequest) -> Result<IosPatchResul
                     continue;
                 }
             };
-            let base_bytes: Option<Vec<u8>> =
-                dest_bytes.get(&dest).cloned().or_else(|| {
-                    archive.by_name(dest.as_str()).ok().and_then(|mut f| {
-                        let mut b = Vec::new();
-                        f.read_to_end(&mut b).ok().map(|_| b)
-                    })
-                });
+            let base_bytes: Option<Vec<u8>> = dest_bytes.get(&dest).cloned().or_else(|| {
+                archive.by_name(dest.as_str()).ok().and_then(|mut f| {
+                    let mut b = Vec::new();
+                    f.read_to_end(&mut b).ok().map(|_| b)
+                })
+            });
             let patch = match fs::read(&ips_path) {
                 Ok(b) => b,
                 Err(_) => {
@@ -5554,7 +5557,10 @@ mod tests {
         assert!(is_enmaignore("sub/ENMAIGNORE"));
         assert!(!is_enmaignore("enmaignore.txt"));
         assert!(!is_enmaignore("assets/x.bin"));
-        assert_eq!(mod_console_label(Some("switch")), Some("Switch".to_string()));
+        assert_eq!(
+            mod_console_label(Some("switch")),
+            Some("Switch".to_string())
+        );
         assert_eq!(mod_console_label(Some(" 3DS ")), Some("3DS".to_string()));
         assert_eq!(mod_console_label(None), None);
         assert_eq!(mod_console_label(Some("  ")), None);
