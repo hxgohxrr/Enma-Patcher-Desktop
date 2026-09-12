@@ -314,5 +314,13 @@
     "drmbRequired": "For an .apks you need your own .drmb (bypass + asset pack). Select it to continue.",
     "singleApk": "You passed a single .apk. Use “Check” to verify whether it is already patched; if it is clean, buy the game and export the full .apks (base + splits) before patching.",
     "apktoolMissing": "The patch includes smali/ but tools/apktool.jar is missing. Download it from Tools."
+  },
+  "update": {
+    "available": "Update {v} available.",
+    "availableShort": "Update available: {v}. Restart to install from the banner.",
+    "now": "Update",
+    "check": "Check for updates",
+    "checking": "Checking…",
+    "upToDate": "You are on the latest version."
   }
 }

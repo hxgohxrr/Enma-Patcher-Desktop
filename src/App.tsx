@@ -33,6 +33,7 @@ import { AndroidView } from "./views/AndroidView";
 import { IosView } from "./views/IosView";
 import { Intro } from "./components/Intro";
 import { Enter } from "./components/Enter";
+import { UpdateBanner } from "./components/Updater";
 import { ModsEditor } from "./components/ModsEditor";
 import { AccountView } from "./views/AccountView";
 import { ToolsView } from "./views/ToolsView";
@@ -483,6 +484,7 @@ export default function App() {
             <Enter play={entered} delay={0.12}>
             <Titlebar />
             </Enter>
+            <UpdateBanner />
           <main className="thin-scroll relative min-h-0 min-w-0 flex-1 overflow-y-auto">
             {!navOpen && (
               <button

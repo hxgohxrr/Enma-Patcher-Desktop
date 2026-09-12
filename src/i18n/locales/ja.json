@@ -314,5 +314,13 @@
     "drmbRequired": ".apksには自分の.drmb(バイパス + asset pack)が必要です。続行するには選択してください。",
     "singleApk": "単体の.apkが渡されました。「確認」でパッチ済みか検証してください。未パッチならゲームを購入し、完全な.apks(base + splits)を出力してからパッチしてください。",
     "apktoolMissing": "パッチにsmali/が含まれますがtools/apktool.jarがありません。ツールから取得してください。"
+  },
+  "update": {
+    "available": "アップデート{v}が利用可能です。",
+    "availableShort": "アップデート利用可能：{v}。バナーから再起動してインストール。",
+    "now": "アップデート",
+    "check": "アップデートを確認",
+    "checking": "確認中…",
+    "upToDate": "最新バージョンです。"
   }
 }

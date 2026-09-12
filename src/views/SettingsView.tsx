@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { checkUpdateSilent } from "../components/Updater";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Check, FolderOpen, Moon, Sun } from "lucide-react";
@@ -42,6 +43,7 @@ export function SettingsView(props: {
   const [, setCrashTick] = useState(0);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
   useEffect(() => subscribeCrashLog(() => setCrashTick((x) => x + 1)), []);
   const list = getCrashEntries();
   const count = list.length;
@@ -116,6 +118,20 @@ export function SettingsView(props: {
       setMsg(t("settings.accountGone"));
     } catch (e) {
       setMsg(humanizeError(t, e));
+    }
+  }
+
+  async function checkUpdates() {
+    if (updateBusy) return;
+    setUpdateBusy(true);
+    setMsg(null);
+    try {
+      const v = await checkUpdateSilent();
+      setMsg(v ? t("update.availableShort", { v }) : t("update.upToDate"));
+    } catch (e) {
+      setMsg(humanizeError(t, e));
+    } finally {
+      setUpdateBusy(false);
     }
   }
 
@@ -342,6 +358,9 @@ export function SettingsView(props: {
           </Button>
           <Button size="sm" variant="secondary" onClick={props.onTour}>
             {t("tour.replay")}
+          </Button>
+          <Button size="sm" variant="secondary" disabled={updateBusy} onClick={() => void checkUpdates()}>
+            {updateBusy ? t("update.checking") : t("update.check")}
           </Button>
           <Button size="sm" variant="ghost" onClick={() => void forgetAccount()}>
             {t("settings.forgetAccount")}

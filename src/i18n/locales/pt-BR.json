@@ -314,5 +314,13 @@
     "drmbRequired": "Para um .apks você precisa do seu .drmb (bypass + asset pack). Selecione-o para continuar.",
     "singleApk": "Você passou um .apk avulso. Use «Verificar» para ver se já tem patch; se estiver limpo, compre o jogo e exporte o .apks completo (base + splits) antes de aplicar o patch.",
     "apktoolMissing": "O patch inclui smali/ mas falta tools/apktool.jar. Baixe em Ferramentas."
+  },
+  "update": {
+    "available": "Atualização {v} disponível.",
+    "availableShort": "Atualização disponível: {v}. Reinicie para instalar pelo aviso.",
+    "now": "Atualizar",
+    "check": "Verificar atualizações",
+    "checking": "Verificando…",
+    "upToDate": "Você está na versão mais recente."
   }
 }
